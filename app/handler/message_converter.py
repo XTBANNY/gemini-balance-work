@@ -61,10 +61,44 @@ def _get_mime_type_and_data(base64_string):
 def _convert_image(image_url: str) -> Dict[str, Any]:
     if image_url.startswith("data:image"):
         mime_type, encoded_data = _get_mime_type_and_data(image_url)
-        return {"inline_data": {"mime_type": mime_type, "data": encoded_data}}
+        return {"inlineData": {"mimeType": mime_type, "data": encoded_data}}
     else:
         encoded_data = _convert_image_to_base64(image_url)
-        return {"inline_data": {"mime_type": "image/png", "data": encoded_data}}
+        return {"inlineData": {"mimeType": "image/png", "data": encoded_data}}
+
+
+def _extract_image_url(content_item: Dict[str, Any]) -> Optional[str]:
+    image_info = content_item.get("image_url") or content_item.get("input_image")
+    if isinstance(image_info, str):
+        return image_info
+    if isinstance(image_info, dict):
+        return image_info.get("url") or image_info.get("image_url")
+    return content_item.get("url")
+
+
+def _convert_tool_response(
+    msg: Dict[str, Any], tool_call_names: Dict[str, str]
+) -> Dict[str, Any]:
+    tool_call_id = msg.get("tool_call_id")
+    name = (
+        msg.get("name")
+        or msg.get("tool_name")
+        or tool_call_names.get(tool_call_id)
+        or tool_call_id
+        or "tool"
+    )
+    content = msg.get("content", "")
+    if not isinstance(content, str):
+        content = json.dumps(content, ensure_ascii=False)
+    return {
+        "functionResponse": {
+            "name": name,
+            "response": {
+                "name": name,
+                "content": content,
+            },
+        }
+    }
 
 
 def _convert_image_to_base64(url: str) -> str:
@@ -163,6 +197,7 @@ class OpenAIMessageConverter(MessageConverter):
     ) -> tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         converted_messages = []
         system_instruction_parts = []
+        tool_call_names = {}
 
         for idx, msg in enumerate(messages):
             role = msg.get("role", "")
@@ -178,22 +213,26 @@ class OpenAIMessageConverter(MessageConverter):
 
                     content_type = content_item.get("type")
 
-                    if content_type == "text" and content_item.get("text"):
+                    if content_type in ("text", "input_text") and content_item.get(
+                        "text"
+                    ):
                         parts.append({"text": content_item["text"]})
-                    elif content_type == "image_url" and content_item.get(
-                        "image_url", {}
-                    ).get("url"):
-                        try:
-                            parts.append(
-                                _convert_image(content_item["image_url"]["url"])
+                    elif content_type in ("image_url", "input_image"):
+                        image_url = _extract_image_url(content_item)
+                        if not image_url:
+                            logger.warning(
+                                f"Skipping image content with missing URL: {content_item}"
                             )
+                            continue
+                        try:
+                            parts.append(_convert_image(image_url))
                         except Exception as e:
                             logger.error(
-                                f"Failed to convert image URL {content_item['image_url']['url']}: {e}"
+                                f"Failed to convert image URL {image_url}: {e}"
                             )
                             parts.append(
                                 {
-                                    "text": f"[Error processing image: {content_item['image_url']['url']}]"
+                                    "text": f"[Error processing image: {image_url}]"
                                 }
                             )
                     elif content_type == "input_audio" and content_item.get(
@@ -307,6 +346,8 @@ class OpenAIMessageConverter(MessageConverter):
                                 f"Unsupported content type or missing data in structured content: {content_type}"
                             )
 
+            elif role == "tool":
+                parts.append(_convert_tool_response(msg, tool_call_names))
             elif (
                 "content" in msg and isinstance(msg["content"], str) and msg["content"]
             ):
@@ -314,7 +355,10 @@ class OpenAIMessageConverter(MessageConverter):
             elif "tool_calls" in msg and isinstance(msg["tool_calls"], list):
                 # Keep existing tool call processing
                 for tool_call in msg["tool_calls"]:
+                    tool_call_id = tool_call.get("id")
                     function_call = tool_call.get("function", {})
+                    if tool_call_id and function_call.get("name"):
+                        tool_call_names[tool_call_id] = function_call["name"]
                     # Sanitize arguments loading
                     arguments_str = function_call.get("arguments", "{}")
                     try:

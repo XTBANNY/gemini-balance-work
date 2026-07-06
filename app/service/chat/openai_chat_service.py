@@ -30,7 +30,7 @@ def _has_media_parts(messages: List[Dict[str, Any]]) -> bool:
     for message in messages:
         if "parts" in message:
             for part in message["parts"]:
-                if "image_url" in part or "inline_data" in part:
+                if "image_url" in part or "inline_data" in part or "inlineData" in part:
                     return True
     return False
 
@@ -56,6 +56,8 @@ def _clean_json_schema_properties(obj: Any) -> Any:
         "oneOf",
         "not",
         "definitions",
+        "additionalProperties",
+        "strict",
         "$schema",
         "$id",
         "$ref",
@@ -110,7 +112,10 @@ def _build_tools(
     # 将 request 中的 tools 合并到 tools 中
     if request.tools:
         function_declarations = []
-        for item in request.tools:
+        request_tools = request.tools
+        if isinstance(request_tools, dict):
+            request_tools = [request_tools]
+        for item in request_tools:
             if not item or not isinstance(item, dict):
                 continue
 
@@ -148,6 +153,33 @@ def _build_tools(
         tool.pop("urlContext", None)
 
     return [tool] if tool else []
+
+
+def _build_tool_config(request: ChatRequest) -> Optional[Dict[str, Any]]:
+    """Map OpenAI tool_choice to Gemini functionCallingConfig when possible."""
+    if not request.tool_choice or not request.tools:
+        return None
+
+    choice = request.tool_choice
+    if choice == "none":
+        return {"functionCallingConfig": {"mode": "NONE"}}
+    if choice in ("auto", "required", "any"):
+        return {
+            "functionCallingConfig": {
+                "mode": "AUTO" if choice == "auto" else "ANY",
+            }
+        }
+    if isinstance(choice, dict):
+        function = choice.get("function") or {}
+        name = function.get("name")
+        if choice.get("type") == "function" and name:
+            return {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [name],
+                }
+            }
+    return None
 
 
 def _get_real_model(model: str) -> str:
@@ -208,6 +240,10 @@ def _build_payload(
         "tools": _build_tools(request, messages),
         "safetySettings": _get_safety_settings(request.model),
     }
+
+    tool_config = _build_tool_config(request)
+    if tool_config:
+        payload["toolConfig"] = tool_config
 
     # 处理 max_tokens 参数
     _validate_and_set_max_tokens(payload, request.max_tokens, logger)

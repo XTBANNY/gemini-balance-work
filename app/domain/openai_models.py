@@ -16,7 +16,7 @@ class ChatRequest(BaseModel):
     stop: Optional[Union[List[str],str]] = None
     reasoning_effort: Optional[str] = None
     tools: Optional[Union[List[Dict[str, Any]], Dict[str, Any]]] = []
-    tool_choice: Optional[str] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
     response_format: Optional[dict] = None
 
 

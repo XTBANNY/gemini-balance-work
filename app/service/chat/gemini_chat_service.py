@@ -77,6 +77,8 @@ def _clean_json_schema_properties(obj: Any) -> Any:
         "oneOf",
         "not",
         "definitions",
+        "additionalProperties",
+        "strict",
         "$schema",
         "$id",
         "$ref",

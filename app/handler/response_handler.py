@@ -53,6 +53,15 @@ def _handle_openai_stream_response(
     choices = []
     candidates = response.get("candidates", [])
 
+    if not candidates:
+        choices.append(
+            {
+                "index": 0,
+                "delta": {},
+                "finish_reason": finish_reason,
+            }
+        )
+
     for candidate in candidates:
         index = candidate.get("index", 0)
         text, reasoning_content, tool_calls, _ = _extract_result(
@@ -70,7 +79,14 @@ def _handle_openai_stream_response(
             if tool_calls:
                 delta["tool_calls"] = tool_calls
 
-        choice = {"index": index, "delta": delta, "finish_reason": finish_reason}
+        choice_finish_reason = (
+            "tool_calls" if tool_calls and finish_reason is not None else finish_reason
+        )
+        choice = {
+            "index": index,
+            "delta": delta,
+            "finish_reason": choice_finish_reason,
+        }
         choices.append(choice)
 
     template_chunk = {
@@ -102,6 +118,7 @@ def _handle_openai_normal_response(
         text, reasoning_content, tool_calls, _ = _extract_result(
             {"candidates": [candidate]}, model, stream=False, gemini_format=False
         )
+        choice_finish_reason = "tool_calls" if tool_calls else finish_reason
         choice = {
             "index": i,
             "message": {
@@ -110,7 +127,7 @@ def _handle_openai_normal_response(
                 "reasoning_content": reasoning_content,
                 "tool_calls": tool_calls,
             },
-            "finish_reason": finish_reason,
+            "finish_reason": choice_finish_reason,
         }
         choices.append(choice)
 
