@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from app.config.config import settings
+from app.handler.tool_call_state import remember_thought_signature
 from app.log.logger import get_openai_logger
 from app.utils.helpers import is_image_upload_configured
 from app.utils.uploader import ImageUploaderFactory
@@ -373,6 +374,9 @@ def _extract_tool_calls(
             id = f"call_{''.join(random.sample(letters, 32))}"
             name = item.get("name", "")
             arguments = json.dumps(item.get("args", None) or {})
+            remember_thought_signature(
+                id, part.get("thoughtSignature") or part.get("thought_signature")
+            )
 
             tool_calls.append(
                 {

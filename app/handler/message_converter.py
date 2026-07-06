@@ -17,6 +17,7 @@ from app.core.constants import (
     SUPPORTED_VIDEO_FORMATS,
     VIDEO_FORMAT_TO_MIMETYPE,
 )
+from app.handler.tool_call_state import get_thought_signature
 from app.log.logger import get_message_converter_logger
 
 logger = get_message_converter_logger()
@@ -372,7 +373,11 @@ class OpenAIMessageConverter(MessageConverter):
                         if "arguments" in function_call:
                             del function_call["arguments"]
 
-                    parts.append({"functionCall": function_call})
+                    part = {"functionCall": function_call}
+                    thought_signature = get_thought_signature(tool_call_id)
+                    if thought_signature:
+                        part["thoughtSignature"] = thought_signature
+                    parts.append(part)
 
             if role not in SUPPORTED_ROLES:
                 if role == "tool":
