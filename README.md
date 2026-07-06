@@ -10,40 +10,14 @@
 - OpenAI 兼容接口里的 `tool_choice` 对象格式。
 - 工具调用响应的 `finish_reason=tool_calls`。
 
-## 当前服务器
-
-已部署服务器：
-
-```text
-IP: 137.131.50.127
-入口端口: 44559
-后端监听: 127.0.0.1:8000
-部署目录: /opt/gemini-balance-work
-systemd 服务: gemini-balance-work
-Nginx 配置: /etc/nginx/sites-available/gemini-balance-work
-数据库: MariaDB / gemini_balance_work
-```
-
-WorkBuddy 接口地址：
-
-```text
-http://137.131.50.127:44559/v1
-```
-
-API Key：
-
-```text
-zhang1202
-```
-
 ## WorkBuddy 配置
 
 在 WorkBuddy 的自定义 OpenAI 兼容模型里填写：
 
 ```text
 提供商: 自定义 / Custom
-接口地址: http://137.131.50.127:44559/v1
-API Key: zhang1202
+接口地址: http://<your-server-ip>:<your-port>/v1
+API Key: <your-workbuddy-api-token>
 模型名称: gemini-3.1-flash-lite
 工具调用: 开启
 图片输入: 开启
@@ -68,7 +42,7 @@ apt-get install -y python3-pip python3-venv git nginx curl
 ```bash
 mysql -uroot <<'SQL'
 CREATE DATABASE IF NOT EXISTS gemini_balance_work CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'gemini_balance'@'localhost' IDENTIFIED BY 'your-db-password';
+CREATE USER IF NOT EXISTS 'gemini_balance'@'localhost' IDENTIFIED BY '<your-db-password>';
 GRANT ALL PRIVILEGES ON gemini_balance_work.* TO 'gemini_balance'@'localhost';
 FLUSH PRIVILEGES;
 SQL
@@ -78,7 +52,7 @@ SQL
 
 ```bash
 mkdir -p /opt
-git clone https://github.com/XTBANNY/gemini-balance-work.git /opt/gemini-balance-work
+git clone https://github.com/<your-github-user>/<your-repo>.git /opt/gemini-balance-work
 cd /opt/gemini-balance-work
 ```
 
@@ -100,12 +74,12 @@ DATABASE_TYPE=mysql
 MYSQL_HOST=127.0.0.1
 MYSQL_PORT=3306
 MYSQL_USER=gemini_balance
-MYSQL_PASSWORD=your-db-password
+MYSQL_PASSWORD=<your-db-password>
 MYSQL_DATABASE=gemini_balance_work
 
-API_KEYS=["your-gemini-api-key-1","your-gemini-api-key-2"]
-ALLOWED_TOKENS=["your-workbuddy-api-token"]
-AUTH_TOKEN=your-admin-token
+API_KEYS=["<your-gemini-api-key-1>","<your-gemini-api-key-2>"]
+ALLOWED_TOKENS=["<your-workbuddy-api-token>"]
+AUTH_TOKEN=<your-admin-token>
 
 BASE_URL=https://generativelanguage.googleapis.com/v1beta
 SHOW_THINKING_PROCESS=true
@@ -116,7 +90,7 @@ TZ=Asia/Shanghai
 LOG_LEVEL=INFO
 ```
 
-`API_KEYS` 和 `ALLOWED_TOKENS` 必须是 JSON 数组字符串。
+`API_KEYS` 和 `ALLOWED_TOKENS` 必须是 JSON 数组字符串。不要把真实 `.env` 提交到 GitHub。
 
 ### 6. 创建 systemd 服务
 
@@ -155,8 +129,8 @@ systemctl status gemini-balance-work
 
 ```nginx
 server {
-    listen 44559;
-    server_name 137.131.50.127;
+    listen <your-public-port>;
+    server_name <your-domain-or-server-ip>;
 
     client_max_body_size 50m;
 
@@ -188,21 +162,21 @@ systemctl reload nginx
 
 ```bash
 curl http://127.0.0.1:8000/health
-curl http://137.131.50.127:44559/health
+curl http://<your-server-ip>:<your-port>/health
 ```
 
 模型列表：
 
 ```bash
-curl http://137.131.50.127:44559/v1/models \
-  -H "Authorization: Bearer zhang1202"
+curl http://<your-server-ip>:<your-port>/v1/models \
+  -H "Authorization: Bearer <your-workbuddy-api-token>"
 ```
 
 普通聊天：
 
 ```bash
-curl http://137.131.50.127:44559/v1/chat/completions \
-  -H "Authorization: Bearer zhang1202" \
+curl http://<your-server-ip>:<your-port>/v1/chat/completions \
+  -H "Authorization: Bearer <your-workbuddy-api-token>" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gemini-3.1-flash-lite",
@@ -214,8 +188,8 @@ curl http://137.131.50.127:44559/v1/chat/completions \
 工具调用 schema 测试：
 
 ```bash
-curl http://137.131.50.127:44559/v1/chat/completions \
-  -H "Authorization: Bearer zhang1202" \
+curl http://<your-server-ip>:<your-port>/v1/chat/completions \
+  -H "Authorization: Bearer <your-workbuddy-api-token>" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gemini-3.1-flash-lite",
@@ -277,7 +251,7 @@ systemctl restart gemini-balance-work
 修改外部端口：
 
 ```bash
-sed -i 's/listen 44559;/listen 新端口;/g' /etc/nginx/sites-available/gemini-balance-work
+sed -i 's/listen <old-port>;/listen <new-port>;/g' /etc/nginx/sites-available/gemini-balance-work
 nginx -t
 systemctl reload nginx
 ```
@@ -292,7 +266,7 @@ mysql -ugemini_balance -p gemini_balance_work
 
 ```sql
 UPDATE t_settings
-SET value='["your-gemini-api-key-1","your-gemini-api-key-2"]', updated_at=NOW()
+SET value='["<your-gemini-api-key-1>","<your-gemini-api-key-2>"]', updated_at=NOW()
 WHERE `key`='API_KEYS';
 ```
 
@@ -302,20 +276,8 @@ WHERE `key`='API_KEYS';
 systemctl restart gemini-balance-work
 ```
 
-## 域名说明
+## 安全提醒
 
-当前 `gbapi.818sx.com` 仍指向 Render，不是这台 VPS。
-
-如果要用域名访问，把 DNS 改成：
-
-```text
-gbapi.818sx.com -> 137.131.50.127
-```
-
-DNS 生效后，可以把 WorkBuddy 地址改为：
-
-```text
-http://gbapi.818sx.com:44559/v1
-```
-
-如需 HTTPS，可以再配置 Nginx 443 和证书。
+- 不要把真实服务器 IP、域名、端口、API Key、数据库密码、GitHub Token 写进公开仓库。
+- 如果任何 token 或 API Key 曾经出现在公开仓库、聊天记录或日志里，请轮换。
+- `.env` 只应该存在服务器本地。
