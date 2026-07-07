@@ -238,6 +238,65 @@ def _has_skill_launcher_tool(tools: Any) -> bool:
     return False
 
 
+def _skill_tool_descriptions(tools: Any) -> List[str]:
+    if isinstance(tools, dict):
+        tools = [tools]
+    if not isinstance(tools, list):
+        return []
+
+    descriptions = []
+    for item in tools:
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function") or item
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        description = function.get("description")
+        if name and description:
+            descriptions.append(f"{name}: {description}")
+    return descriptions
+
+
+def _last_user_text(messages: List[Dict[str, Any]]) -> str:
+    for message in reversed(messages or []):
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            texts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if isinstance(item.get("text"), str):
+                        texts.append(item["text"])
+                    elif isinstance(item.get("content"), str):
+                        texts.append(item["content"])
+            return "\n".join(texts)
+    return ""
+
+
+def _is_skill_explanation_request(messages: List[Dict[str, Any]]) -> bool:
+    text = _last_user_text(messages).lower()
+    if not text:
+        return False
+    explanation_markers = (
+        "怎么用",
+        "如何用",
+        "怎么使用",
+        "如何使用",
+        "是什么",
+        "能做什么",
+        "介绍",
+        "说明",
+        "what is",
+        "how to use",
+        "what does",
+    )
+    return "skill" in text and any(marker in text for marker in explanation_markers)
+
+
 def _append_system_instruction(
     instruction: Optional[Dict[str, Any]], text: str
 ) -> Dict[str, Any]:
@@ -300,10 +359,22 @@ def _build_payload(
     instruction: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """构建请求payload"""
-    if _has_skill_launcher_tool(request.tools):
+    has_skill_launcher_tool = _has_skill_launcher_tool(request.tools)
+    is_skill_explanation_request = (
+        has_skill_launcher_tool and _is_skill_explanation_request(request.messages)
+    )
+
+    if has_skill_launcher_tool:
+        skill_descriptions = _skill_tool_descriptions(request.tools)
+        skill_context = (
+            "\nAvailable skill/tool descriptions:\n" + "\n".join(skill_descriptions)
+            if skill_descriptions
+            else ""
+        )
         instruction = _append_system_instruction(
             instruction,
-            "When the user asks what a skill is, what it does, or how to use a skill, answer directly using the available skill/tool descriptions. Do not call the default_api:Skill launcher for explanatory questions. Call default_api:Skill only when the user explicitly asks to activate a skill or perform an action that requires that skill.",
+            "When the user asks what a skill is, what it does, or how to use a skill, answer directly using the available skill/tool descriptions. Do not call the default_api:Skill launcher for explanatory questions. Call default_api:Skill only when the user explicitly asks to activate a skill or perform an action that requires that skill."
+            + skill_context,
         )
 
     payload = {
@@ -314,11 +385,11 @@ def _build_payload(
             "topP": request.top_p,
             "topK": request.top_k,
         },
-        "tools": _build_tools(request, messages),
+        "tools": [] if is_skill_explanation_request else _build_tools(request, messages),
         "safetySettings": _get_safety_settings(request.model),
     }
 
-    tool_config = _build_tool_config(request)
+    tool_config = None if is_skill_explanation_request else _build_tool_config(request)
     if tool_config:
         payload["toolConfig"] = tool_config
 
