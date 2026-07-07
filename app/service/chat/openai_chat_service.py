@@ -294,7 +294,7 @@ def _is_skill_explanation_request(messages: List[Dict[str, Any]]) -> bool:
         "how to use",
         "what does",
     )
-    return "skill" in text and any(marker in text for marker in explanation_markers)
+    return any(marker in text for marker in explanation_markers)
 
 
 def _append_system_instruction(
