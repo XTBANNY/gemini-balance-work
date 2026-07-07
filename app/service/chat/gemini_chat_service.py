@@ -61,6 +61,28 @@ def _clean_json_schema_properties(obj: Any) -> Any:
     if not isinstance(obj, dict):
         return obj
 
+    def _first_supported_type(value: Any):
+        if isinstance(value, str):
+            return value if value != "null" else None
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and item != "null":
+                    return item
+        return None
+
+    inferred_type = None
+    for composition_key in ("anyOf", "oneOf", "allOf"):
+        variants = obj.get(composition_key)
+        if not isinstance(variants, list):
+            continue
+        for variant in variants:
+            if isinstance(variant, dict):
+                inferred_type = _first_supported_type(variant.get("type"))
+                if inferred_type:
+                    break
+        if inferred_type:
+            break
+
     # Gemini API不支持的JSON Schema字段
     unsupported_fields = {
         "exclusiveMaximum",
@@ -91,12 +113,20 @@ def _clean_json_schema_properties(obj: Any) -> Any:
     for key, value in obj.items():
         if key in unsupported_fields:
             continue
+        if key == "type":
+            normalized_type = _first_supported_type(value)
+            if normalized_type:
+                cleaned[key] = normalized_type
+            continue
         if isinstance(value, dict):
             cleaned[key] = _clean_json_schema_properties(value)
         elif isinstance(value, list):
             cleaned[key] = [_clean_json_schema_properties(item) for item in value]
         else:
             cleaned[key] = value
+
+    if "type" not in cleaned and inferred_type:
+        cleaned["type"] = inferred_type
 
     return cleaned
 
