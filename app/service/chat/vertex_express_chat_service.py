@@ -100,6 +100,10 @@ def _clean_json_schema_properties(obj: Any) -> Any:
 
     if "type" not in cleaned and inferred_type:
         cleaned["type"] = inferred_type
+    if cleaned.get("type") == "array":
+        items = cleaned.get("items")
+        if not isinstance(items, dict) or not items.get("type"):
+            cleaned["items"] = {"type": "string"}
 
     return cleaned
 
