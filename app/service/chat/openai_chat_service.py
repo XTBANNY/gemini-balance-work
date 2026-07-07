@@ -224,6 +224,35 @@ def _build_tool_config(request: ChatRequest) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _has_skill_launcher_tool(tools: Any) -> bool:
+    if isinstance(tools, dict):
+        tools = [tools]
+    if not isinstance(tools, list):
+        return False
+    for item in tools:
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function") or item
+        if isinstance(function, dict) and function.get("name") == "default_api:Skill":
+            return True
+    return False
+
+
+def _append_system_instruction(
+    instruction: Optional[Dict[str, Any]], text: str
+) -> Dict[str, Any]:
+    if (
+        instruction
+        and isinstance(instruction, dict)
+        and instruction.get("role") == "system"
+        and isinstance(instruction.get("parts"), list)
+    ):
+        merged = deepcopy(instruction)
+        merged["parts"] = [*merged["parts"], {"text": text}]
+        return merged
+    return {"role": "system", "parts": [{"text": text}]}
+
+
 def _get_real_model(model: str) -> str:
     if model.endswith("-search"):
         model = model[:-7]
@@ -271,6 +300,12 @@ def _build_payload(
     instruction: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """构建请求payload"""
+    if _has_skill_launcher_tool(request.tools):
+        instruction = _append_system_instruction(
+            instruction,
+            "When the user asks what a skill is, what it does, or how to use a skill, answer directly using the available skill/tool descriptions. Do not call the default_api:Skill launcher for explanatory questions. Call default_api:Skill only when the user explicitly asks to activate a skill or perform an action that requires that skill.",
+        )
+
     payload = {
         "contents": messages,
         "generationConfig": {
