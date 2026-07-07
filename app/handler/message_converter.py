@@ -362,19 +362,26 @@ class OpenAIMessageConverter(MessageConverter):
                         tool_call_names[tool_call_id] = function_call["name"]
                     # Sanitize arguments loading
                     arguments_str = function_call.get("arguments", "{}")
-                    try:
-                        function_call["args"] = json.loads(arguments_str)
-                    except json.JSONDecodeError:
-                        logger.warning(
-                            f"Failed to decode tool call arguments: {arguments_str}"
-                        )
-                        function_call["args"] = {}
+                    if isinstance(arguments_str, dict):
+                        function_call["args"] = arguments_str
+                    else:
+                        try:
+                            function_call["args"] = json.loads(arguments_str or "{}")
+                        except (json.JSONDecodeError, TypeError):
+                            logger.warning(
+                                f"Failed to decode tool call arguments: {arguments_str}"
+                            )
+                            function_call["args"] = {}
                     if "arguments" in function_call:
                         if "arguments" in function_call:
                             del function_call["arguments"]
 
                     part = {"functionCall": function_call}
-                    thought_signature = get_thought_signature(tool_call_id)
+                    thought_signature = get_thought_signature(
+                        tool_call_id,
+                        name=function_call.get("name"),
+                        args=function_call.get("args"),
+                    )
                     if thought_signature:
                         part["thoughtSignature"] = thought_signature
                     parts.append(part)

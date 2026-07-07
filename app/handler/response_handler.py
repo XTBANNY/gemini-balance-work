@@ -375,7 +375,10 @@ def _extract_tool_calls(
             name = item.get("name", "")
             arguments = json.dumps(item.get("args", None) or {})
             remember_thought_signature(
-                id, part.get("thoughtSignature") or part.get("thought_signature")
+                id,
+                part.get("thoughtSignature") or part.get("thought_signature"),
+                name=name,
+                args=item.get("args", None) or {},
             )
 
             tool_calls.append(
