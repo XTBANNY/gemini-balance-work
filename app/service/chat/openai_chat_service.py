@@ -110,6 +110,14 @@ def _clean_json_schema_properties(obj: Any) -> Any:
         items = cleaned.get("items")
         if not isinstance(items, dict) or not items.get("type"):
             cleaned["items"] = {"type": "string"}
+    if isinstance(cleaned.get("required"), list) and isinstance(
+        cleaned.get("properties"), dict
+    ):
+        cleaned["required"] = [
+            item for item in cleaned["required"] if item in cleaned["properties"]
+        ]
+        if not cleaned["required"]:
+            cleaned.pop("required", None)
 
     return cleaned
 
